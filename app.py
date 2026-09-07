@@ -6,11 +6,11 @@ import io
 import uuid
 
 # 1. पेज सेटअप और Gemini ऐप जैसा स्टाइल
-st.set_page_config(page_title="Diva AI", page_icon="✨", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Diva AI", page_icon="✨", layout="centered", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
-    #MainMenu, footer, header, .stDeployButton {display:none !important;}
+     footer, .stDeployButton {display:none !important;}
     .block-container {padding-top: 1rem; padding-bottom: 5.5rem;}
     
     /* Gemini Greeting Style */
