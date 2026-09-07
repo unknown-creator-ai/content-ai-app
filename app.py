@@ -1,7 +1,7 @@
 import streamlit as st
 from google import genai
 
-st.title("My AI App")
+st.title("Smart AI")
 
 key = st.text_input("Gemini API Key:", type="password")
 prompt = st.text_input("Enter prompt:")
