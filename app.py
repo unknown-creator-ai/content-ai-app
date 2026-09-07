@@ -15,7 +15,7 @@ if st.button("Generate"):
         try:
             client = genai.Client(api_key=key.strip())
             res = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-3.6-flash",
                 contents=prompt
             )
             st.write(res.text)
