@@ -12,7 +12,7 @@ if st.button("Generate"):
         try:
             client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             res = client.models.generate_content(
-                model="gemini-3.6-flash",
+                model="gemini-1.5-flash",
                 contents=prompt
             )
             st.write(res.text)
