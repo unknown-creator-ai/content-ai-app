@@ -43,18 +43,7 @@ if not api_key:
 
 genai.configure(api_key=api_key)
 
-@st.cache_resource
-def get_working_model():
-    try:
-        available_models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-        for m_name in available_models:
-            if "flash" in m_name:
-                return genai.GenerativeModel(m_name)
-        return genai.GenerativeModel(available_models[0])
-    except Exception:
-        return genai.GenerativeModel("gemini-1.5-flash")
-
-model = get_working_model()
+model=genai.GenerativeModel("gemini-3.6-flash")
 
 # 3. मल्टी-चैट सेशन मैनेजमेंट
 if "all_chats" not in st.session_state:
