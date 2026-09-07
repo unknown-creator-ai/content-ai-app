@@ -5,15 +5,14 @@ import numpy as np
 import io
 import uuid
 
-# 1. पेज सेटअप और Gemini ऐप जैसा स्टाइल
+# 1. पेज सेटअप और स्टाइलिंग
 st.set_page_config(page_title="Diva AI", page_icon="✨", layout="centered", initial_sidebar_state="expanded")
 
 st.markdown("""
     <style>
-     footer, .stDeployButton {display:none !important;}
+    footer, .stDeployButton {display:none !important;}
     .block-container {padding-top: 1rem; padding-bottom: 5.5rem;}
     
-    /* Gemini Greeting Style */
     .greeting-sub {
         font-size: 1.2rem;
         color: #888;
@@ -27,8 +26,6 @@ st.markdown("""
         line-height: 1.2;
         margin-bottom: 2rem;
     }
-    
-    /* Action Buttons */
     div.stButton > button {
         border-radius: 12px;
         text-align: left;
@@ -38,7 +35,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# 2. Gemini AI सेटअप
+# 2. Gemini AI ऑटो-डिटेक्ट मॉडल
 api_key = st.secrets.get("GEMINI_API_KEY")
 if not api_key:
     st.error("⚠️ GEMINI_API_KEY नहीं मिली!")
@@ -47,30 +44,29 @@ if not api_key:
 genai.configure(api_key=api_key)
 
 @st.cache_resource
-def get_model():
-    for name in ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]:
-        try:
-            m = genai.GenerativeModel(name)
-            m.generate_content("hi")
-            return m
-        except Exception:
-            continue
-    return genai.GenerativeModel("gemini-pro")
+def get_working_model():
+    try:
+        available_models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        for m_name in available_models:
+            if "flash" in m_name:
+                return genai.GenerativeModel(m_name)
+        return genai.GenerativeModel(available_models[0])
+    except Exception:
+        return genai.GenerativeModel("gemini-1.5-flash")
 
-model = get_model()
+model = get_working_model()
 
-# 3. मल्टी-चैट सेशन मैनेजमेंट (Gemini साइडबार हिस्ट्री जैसी)
+# 3. मल्टी-चैट सेशन मैनेजमेंट
 if "all_chats" not in st.session_state:
-    st.session_state.all_chats = {} # format: {chat_id: {"title": "...", "messages": []}}
+    st.session_state.all_chats = {}
 
 if "current_chat_id" not in st.session_state:
     new_id = str(uuid.uuid4())[:8]
     st.session_state.all_chats[new_id] = {"title": "New Chat", "messages": []}
     st.session_state.current_chat_id = new_id
 
-# 4. साइडबार (Google Gemini जैसा नेविगेशन और चैट हिस्ट्री)
+# 4. साइडबार: New Chat, चैट लिस्ट, डिलीट और फेस-सेफ स्टूडियो
 with st.sidebar:
-    # New Chat बटन
     if st.button("✏️ New chat", use_container_width=True):
         new_id = str(uuid.uuid4())[:8]
         st.session_state.all_chats[new_id] = {"title": "New Chat", "messages": []}
@@ -78,8 +74,6 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("### 💬 Chats")
-    
-    # पुरानी चैट्स की लिस्ट
     chat_ids = list(st.session_state.all_chats.keys())
     for cid in reversed(chat_ids):
         chat_data = st.session_state.all_chats[cid]
@@ -116,12 +110,12 @@ with st.sidebar:
             proc = Image.fromarray(arr.astype(np.uint8))
         
         enhanced_img = proc
-        st.image(enhanced_img, caption="Face-Preserved Preview", use_container_width=True)
+        st.image(enhanced_img, caption="Enhanced Preview", use_container_width=True)
         buf = io.BytesIO()
         enhanced_img.save(buf, format="JPEG", quality=95)
         st.download_button("📥 HD फ़ोटो सेव करें", data=buf.getvalue(), file_name="diva_edit.jpg", mime="image/jpeg", use_container_width=True)
 
-# 5. वर्तमान चैट का डेटा लोड करना
+# 5. वर्तमान चैट लोड करना
 current_id = st.session_state.current_chat_id
 if not current_id or current_id not in st.session_state.all_chats:
     new_id = str(uuid.uuid4())[:8]
@@ -131,13 +125,12 @@ if not current_id or current_id not in st.session_state.all_chats:
 
 current_messages = st.session_state.all_chats[current_id]["messages"]
 
-# 6. मुख्य स्क्रीन: खाली चैट होने पर Gemini जैसा वेलकम कार्ड
+# 6. मुख्य स्क्रीन: वेलकम स्क्रीन (Gemini लुक)
 suggestion_clicked = None
 if len(current_messages) == 0:
     st.markdown('<div class="greeting-sub">Hi Kundan</div>', unsafe_allow_html=True)
     st.markdown('<div class="greeting-main">Where should we start?</div>', unsafe_allow_html=True)
     
-    # सजेशन बटन्स
     if st.button("🖼️ Create / Edit image", use_container_width=True):
         suggestion_clicked = "फोटो एडिट करने के बेहतरीन टिप्स बताओ"
     if st.button("🏏 Explore IPL Fan Zone", use_container_width=True):
@@ -147,17 +140,17 @@ if len(current_messages) == 0:
     if st.button("📝 Write anything", use_container_width=True):
         suggestion_clicked = "मेरे लिए एक बेहतरीन विचार या पोस्ट लिखो"
 
-# 7. पुरानी बातचीत स्क्रीन पर दिखाना
+# 7. मैसेजेस दिखाना
 for msg in current_messages:
-    av = "👤" if msg["role"] == "user" else "✨"
+    av = "👤" if msg["role"] == "user" else "⚡"
     with st.chat_message(msg["role"], avatar=av):
         st.markdown(msg["content"])
 
-# 8. वॉइस मैसेज विकल्प
+# 8. वॉइस इनपुट
 with st.expander("🎙️ वॉइस मैसेज (Tap to record)", expanded=False):
     audio_data = st.audio_input("माइक ऑन करें")
 
-# 9. चैट इनपुट (टेक्स्ट या सजेशन)
+# 9. इनपुट और फ़ास्ट स्ट्रीमिंग रिस्पॉन्स
 prompt = st.chat_input("Ask Diva AI...")
 if suggestion_clicked:
     prompt = suggestion_clicked
@@ -165,7 +158,6 @@ if suggestion_clicked:
 if prompt or audio_data:
     user_text = prompt if prompt else "🎙️ [वॉइस संदेश]"
     
-    # पहली चैट का शीर्षक ऑटो-सेट करना
     if len(current_messages) == 0 and prompt:
         st.session_state.all_chats[current_id]["title"] = prompt[:22]
 
@@ -173,13 +165,13 @@ if prompt or audio_data:
     with st.chat_message("user", avatar="👤"):
         st.markdown(user_text)
 
-    with st.chat_message("assistant", avatar="✨"):
+    with st.chat_message("assistant", avatar="⚡"):
         def response_stream():
             try:
                 inputs = []
                 if audio_data and not prompt:
                     inputs.append({"mime_type": "audio/wav", "data": audio_data.read()})
-                    inputs.append("कृपया इस वॉइस मैसेज को सुनकर हिंदी में उत्तर दें।")
+                    inputs.append("कृपया इस वॉइस मैसेज को सुनकर उत्तर दें।")
                 else:
                     inputs.append(prompt)
                 
