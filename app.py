@@ -1,28 +1,39 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance
 import numpy as np
 import io
+import uuid
 
-# 1. पेज सेटअप & ChatGPT डार्क-स्टाइल मोबाइल लेआउट
-st.set_page_config(page_title="Diva AI Pro", page_icon="⚡", layout="centered")
+# 1. पेज सेटअप और Gemini ऐप जैसा स्टाइल
+st.set_page_config(page_title="Diva AI", page_icon="✨", layout="centered", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
     #MainMenu, footer, header, .stDeployButton {display:none !important;}
     .block-container {padding-top: 1rem; padding-bottom: 5.5rem;}
-    .top-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding-bottom: 10px;
-        margin-bottom: 15px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    
+    /* Gemini Greeting Style */
+    .greeting-sub {
+        font-size: 1.2rem;
+        color: #888;
+        font-weight: 500;
+        margin-bottom: -5px;
     }
-    .top-title {
-        font-size: 1.5rem;
-        font-weight: 800;
-        letter-spacing: -0.5px;
+    .greeting-main {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #FFFFFF;
+        line-height: 1.2;
+        margin-bottom: 2rem;
+    }
+    
+    /* Action Buttons */
+    div.stButton > button {
+        border-radius: 12px;
+        text-align: left;
+        padding: 10px 16px;
+        font-weight: 500;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -30,123 +41,158 @@ st.markdown("""
 # 2. Gemini AI सेटअप
 api_key = st.secrets.get("GEMINI_API_KEY")
 if not api_key:
-    st.error("⚠️ GEMINI_API_KEY कॉन्फ़िगर नहीं है!")
+    st.error("⚠️ GEMINI_API_KEY नहीं मिली!")
     st.stop()
 
 genai.configure(api_key=api_key)
 
 @st.cache_resource
-def load_gemini():
+def get_model():
     for name in ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]:
         try:
             m = genai.GenerativeModel(name)
-            m.generate_content("ping")
+            m.generate_content("hi")
             return m
         except Exception:
             continue
     return genai.GenerativeModel("gemini-pro")
 
-model = load_gemini()
+model = get_model()
 
-# 3. टॉप बार (Diva AI + Quick Clear Chat)
-c1, c2 = st.columns([3, 1])
-with c1:
-    st.markdown('<div class="top-title">⚡ Diva AI Pro</div>', unsafe_allow_html=True)
-with c2:
-    if st.button("🗑️ Clear", use_container_width=True):
-        st.session_state.messages = []
+# 3. मल्टी-चैट सेशन मैनेजमेंट (Gemini साइडबार हिस्ट्री जैसी)
+if "all_chats" not in st.session_state:
+    st.session_state.all_chats = {} # format: {chat_id: {"title": "...", "messages": []}}
+
+if "current_chat_id" not in st.session_state:
+    new_id = str(uuid.uuid4())[:8]
+    st.session_state.all_chats[new_id] = {"title": "New Chat", "messages": []}
+    st.session_state.current_chat_id = new_id
+
+# 4. साइडबार (Google Gemini जैसा नेविगेशन और चैट हिस्ट्री)
+with st.sidebar:
+    # New Chat बटन
+    if st.button("✏️ New chat", use_container_width=True):
+        new_id = str(uuid.uuid4())[:8]
+        st.session_state.all_chats[new_id] = {"title": "New Chat", "messages": []}
+        st.session_state.current_chat_id = new_id
         st.rerun()
 
-# 4. साइडबार: फेस-प्रिजर्विंग फोटो स्टूडियो (Face Safe Enhancer)
-with st.sidebar:
-    st.title("🎨 Face-Safe Studio")
-    st.caption("चेहरे की पहचान बदले बिना नेचुरल लाइटिंग और स्किन एनहांसमेंट")
+    st.markdown("### 💬 Chats")
     
-    uploaded_file = st.file_uploader("फ़ोटो चुनें", type=["jpg", "jpeg", "png"])
-    final_image = None
-    
-    if uploaded_file:
-        raw_img = Image.open(uploaded_file).convert("RGB")
+    # पुरानी चैट्स की लिस्ट
+    chat_ids = list(st.session_state.all_chats.keys())
+    for cid in reversed(chat_ids):
+        chat_data = st.session_state.all_chats[cid]
+        col_c, col_del = st.columns([4, 1])
+        with col_c:
+            label = ("👉 " if cid == st.session_state.current_chat_id else "") + chat_data["title"][:18]
+            if st.button(label, key=f"chat_{cid}", use_container_width=True):
+                st.session_state.current_chat_id = cid
+                st.rerun()
+        with col_del:
+            if st.button("🗑️", key=f"del_{cid}"):
+                del st.session_state.all_chats[cid]
+                if st.session_state.current_chat_id == cid:
+                    rem = list(st.session_state.all_chats.keys())
+                    st.session_state.current_chat_id = rem[-1] if rem else None
+                st.rerun()
+
+    st.markdown("---")
+    st.subheader("🎨 Face-Safe Studio")
+    up_img = st.file_uploader("फ़ोटो अपलोड करें", type=["jpg", "jpeg", "png"], key="side_uploader")
+    enhanced_img = None
+    if up_img:
+        base = Image.open(up_img).convert("RGB")
+        b_val = st.slider("☀️ स्टूडियो लाइट", 0.8, 1.5, 1.05, 0.05)
+        c_val = st.slider("🌓 डेप्थ & क्लैरिटी", 0.8, 1.4, 1.1, 0.05)
+        w_val = st.slider("✨ स्किन ग्लो (Warmth)", -20, 20, 4, 2)
         
-        # प्रो-ग्रेड फेस सेफ कंट्रोल्स
-        st.markdown("**नेचुरल रीटचिंग टूल्स**")
-        lighting = st.slider("☀️ स्टूडियो लाइट (Exposure)", 0.8, 1.6, 1.0, 0.05)
-        contrast = st.slider("🌓 डेप्थ & क्लैरिटी (Contrast)", 0.8, 1.4, 1.05, 0.05)
-        skin_glow = st.slider("✨ वॉर्म स्किन ग्लो (Warmth)", -20, 20, 0, 2)
-        sharpness = st.slider("🔍 डिटेल शार्पनेस", 0.8, 2.0, 1.1, 0.1)
-
-        # 1. लाइटिंग और कॉन्ट्रास्ट
-        img_proc = ImageEnhance.Brightness(raw_img).enhance(lighting)
-        img_proc = ImageEnhance.Contrast(img_proc).enhance(contrast)
-        img_proc = ImageEnhance.Sharpness(img_proc).enhance(sharpness)
+        proc = ImageEnhance.Brightness(base).enhance(b_val)
+        proc = ImageEnhance.Contrast(proc).enhance(c_val)
+        if w_val != 0:
+            arr = np.array(proc, dtype=np.int16)
+            arr[:, :, 0] = np.clip(arr[:, :, 0] + w_val, 0, 255)
+            arr[:, :, 2] = np.clip(arr[:, :, 2] - w_val, 0, 255)
+            proc = Image.fromarray(arr.astype(np.uint8))
         
-        # 2. फेस-सेफ वॉर्मथ ट्यूनिंग (RGB बैलेंस)
-        if skin_glow != 0:
-            arr = np.array(img_proc, dtype=np.int16)
-            arr[:, :, 0] = np.clip(arr[:, :, 0] + skin_glow, 0, 255) # Red
-            arr[:, :, 2] = np.clip(arr[:, :, 2] - skin_glow, 0, 255) # Blue
-            img_proc = Image.fromarray(arr.astype(np.uint8))
-
-        final_image = img_proc
-        st.image(final_image, caption="Enhanced Preview", use_container_width=True)
-
-        # डाउनलोड बटन
+        enhanced_img = proc
+        st.image(enhanced_img, caption="Face-Preserved Preview", use_container_width=True)
         buf = io.BytesIO()
-        final_image.save(buf, format="JPEG", quality=95)
-        st.download_button("📥 HD फ़ोटो सेव करें", data=buf.getvalue(), file_name="diva_portrait.jpg", mime="image/jpeg", use_container_width=True)
+        enhanced_img.save(buf, format="JPEG", quality=95)
+        st.download_button("📥 HD फ़ोटो सेव करें", data=buf.getvalue(), file_name="diva_edit.jpg", mime="image/jpeg", use_container_width=True)
 
-# 5. वॉइस इनपुट टूल (माइक)
-with st.expander("🎙️ वॉइस मैसेज भेजें (Tap to record)", expanded=False):
-    audio_val = st.audio_input("अपनी आवाज़ रिकॉर्ड करें")
+# 5. वर्तमान चैट का डेटा लोड करना
+current_id = st.session_state.current_chat_id
+if not current_id or current_id not in st.session_state.all_chats:
+    new_id = str(uuid.uuid4())[:8]
+    st.session_state.all_chats[new_id] = {"title": "New Chat", "messages": []}
+    st.session_state.current_chat_id = new_id
+    current_id = new_id
 
-# 6. चैट हिस्ट्री मैनेजमेंट
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+current_messages = st.session_state.all_chats[current_id]["messages"]
 
-for msg in st.session_state.messages:
-    av = "👤" if msg["role"] == "user" else "⚡"
+# 6. मुख्य स्क्रीन: खाली चैट होने पर Gemini जैसा वेलकम कार्ड
+suggestion_clicked = None
+if len(current_messages) == 0:
+    st.markdown('<div class="greeting-sub">Hi Kundan</div>', unsafe_allow_html=True)
+    st.markdown('<div class="greeting-main">Where should we start?</div>', unsafe_allow_html=True)
+    
+    # सजेशन बटन्स
+    if st.button("🖼️ Create / Edit image", use_container_width=True):
+        suggestion_clicked = "फोटो एडिट करने के बेहतरीन टिप्स बताओ"
+    if st.button("🏏 Explore IPL Fan Zone", use_container_width=True):
+        suggestion_clicked = "IPL के लेटेस्ट अपडेट्स और रोचक तथ्य बताओ"
+    if st.button("🎵 Create music / lyrics", use_container_width=True):
+        suggestion_clicked = "एक खूबसूरत गाने के बोल (lyrics) लिखकर दो"
+    if st.button("📝 Write anything", use_container_width=True):
+        suggestion_clicked = "मेरे लिए एक बेहतरीन विचार या पोस्ट लिखो"
+
+# 7. पुरानी बातचीत स्क्रीन पर दिखाना
+for msg in current_messages:
+    av = "👤" if msg["role"] == "user" else "✨"
     with st.chat_message(msg["role"], avatar=av):
         st.markdown(msg["content"])
 
-# 7. इनपुट हैंडलर (टेक्स्ट, वॉइस और इमेज)
-prompt = st.chat_input("Ask Diva AI anything...")
+# 8. वॉइस मैसेज विकल्प
+with st.expander("🎙️ वॉइस मैसेज (Tap to record)", expanded=False):
+    audio_data = st.audio_input("माइक ऑन करें")
 
-user_input = None
-audio_to_process = None
+# 9. चैट इनपुट (टेक्स्ट या सजेशन)
+prompt = st.chat_input("Ask Diva AI...")
+if suggestion_clicked:
+    prompt = suggestion_clicked
 
-if prompt:
-    user_input = prompt
-elif audio_val:
-    user_input = "🎙️ [वॉइस मैसेज प्राप्त हुआ]"
-    audio_to_process = audio_val
+if prompt or audio_data:
+    user_text = prompt if prompt else "🎙️ [वॉइस संदेश]"
+    
+    # पहली चैट का शीर्षक ऑटो-सेट करना
+    if len(current_messages) == 0 and prompt:
+        st.session_state.all_chats[current_id]["title"] = prompt[:22]
 
-if user_input:
-    st.session_state.messages.append({"role": "user", "content": user_input})
+    current_messages.append({"role": "user", "content": user_text})
     with st.chat_message("user", avatar="👤"):
-        st.markdown(user_input)
+        st.markdown(user_text)
 
-    # ChatGPT जैसी लाइव स्ट्रीमिंग
-    with st.chat_message("assistant", avatar="⚡"):
-        def generate_chunks():
+    with st.chat_message("assistant", avatar="✨"):
+        def response_stream():
             try:
                 inputs = []
-                if audio_to_process:
-                    audio_bytes = audio_to_process.read()
-                    inputs.append({"mime_type": "audio/wav", "data": audio_bytes})
-                    inputs.append("कृपया इस ऑडियो को सुनें और हिंदी में सटीक उत्तर दें।")
+                if audio_data and not prompt:
+                    inputs.append({"mime_type": "audio/wav", "data": audio_data.read()})
+                    inputs.append("कृपया इस वॉइस मैसेज को सुनकर हिंदी में उत्तर दें।")
                 else:
                     inputs.append(prompt)
+                
+                if enhanced_img:
+                    inputs.append(enhanced_img)
 
-                if final_image:
-                    inputs.append(final_image)
-
-                response = model.generate_content(inputs, stream=True)
-                for chunk in response:
+                res = model.generate_content(inputs, stream=True)
+                for chunk in res:
                     if chunk.text:
                         yield chunk.text
-            except Exception as err:
-                yield f"एरर: {err}"
+            except Exception as e:
+                yield f"एरर: {e}"
 
-        full_response = st.write_stream(generate_chunks)
-        st.session_state.messages.append({"role": "assistant", "content": full_response})
+        answer = st.write_stream(response_stream)
+        current_messages.append({"role": "assistant", "content": answer})
 
