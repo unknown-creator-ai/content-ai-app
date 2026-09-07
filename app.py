@@ -3,17 +3,14 @@ from google import genai
 
 st.title("Smart AI")
 
-key = st.text_input("Gemini API Key:", type="password")
 prompt = st.text_input("Enter prompt:")
 
 if st.button("Generate"):
-    if not key:
-        st.warning("Please enter your Gemini API Key.")
-    elif not prompt:
+    if not prompt:
         st.warning("Please enter a prompt.")
     else:
         try:
-            client = genai.Client(api_key=key.strip())
+            client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
             res = client.models.generate_content(
                 model="gemini-3.6-flash",
                 contents=prompt
@@ -21,3 +18,4 @@ if st.button("Generate"):
             st.write(res.text)
         except Exception as e:
             st.error(f"Error details: {e}")
+
