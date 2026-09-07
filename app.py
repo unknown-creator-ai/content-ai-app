@@ -1,7 +1,7 @@
 import streamlit as st
 from google import genai
 
-st.title("Smart AI")
+st.title("Diva AI")
 
 prompt = st.text_input("Enter prompt:")
 
