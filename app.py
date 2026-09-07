@@ -7,12 +7,17 @@ key = st.text_input("Gemini API Key:", type="password")
 prompt = st.text_input("Enter prompt:")
 
 if st.button("Generate"):
-    if key and prompt:
-        client = genai.Client(api_key=key.strip())
-        res = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
-        )
-        st.write(res.text)
+    if not key:
+        st.warning("Please enter your Gemini API Key.")
+    elif not prompt:
+        st.warning("Please enter a prompt.")
     else:
-        st.warning("Please enter both API key and prompt.")
+        try:
+            client = genai.Client(api_key=key.strip())
+            res = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt
+            )
+            st.write(res.text)
+        except Exception as e:
+            st.error(f"Error details: {e}")
