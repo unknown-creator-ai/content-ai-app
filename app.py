@@ -3,7 +3,7 @@ import google.generativeai as genai
 from PIL import Image
 import io
 
-# 1. पेज सेटअप (मोबाइल पर साइडबार डिफ़ॉल्ट बंद ताकि स्क्रीन न ढके)
+# 1. पेज सेटअप
 st.set_page_config(
     page_title="Diva AI Pro",
     page_icon="✨",
@@ -11,111 +11,140 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# 2. कस्टम मोबाइल CSS (सॉफ्ट और क्लीन लुक)
+# 2. मॉडर्न चैट UI CSS (Gemini स्टाइल बॉटम बार)
 st.markdown("""
 <style>
-    .stApp { background-color: #0f1117; color: #ffffff; }
-    .title-box {
-        background: #1a1f2c;
-        padding: 14px 18px;
-        border-radius: 12px;
-        margin-bottom: 12px;
-        border: 1px solid #2d3748;
+    .stApp { background-color: #0e1117; color: #ffffff; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; margin-bottom: 12px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1e222d;
+        border-radius: 8px;
+        color: #9ca3af;
+        padding: 8px 18px;
+        font-weight: 600;
     }
-    .main-heading { font-size: 20px; font-weight: 700; color: #60a5fa; }
-    .sub-heading { font-size: 13px; color: #9ca3af; }
+    .stTabs [aria-selected="true"] {
+        background-color: #2563eb !important;
+        color: #ffffff !important;
+    }
+    .input-panel {
+        background-color: #1a1f2c;
+        border: 1px solid #2d3748;
+        border-radius: 12px;
+        padding: 10px;
+        margin-top: 10px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# 3. Gemini API सेटअप
+# 3. API सेटअप
 api_key = st.secrets.get("GEMINI_API_KEY")
 if not api_key:
-    st.error("⚠️ GEMINI_API_KEY नहीं मिली! Streamlit Secrets चेक करें।")
+    st.error("⚠️ GEMINI_API_KEY नहीं मिली! कृपया Streamlit Secrets में डालें।")
     st.stop()
 
 genai.configure(api_key=api_key)
 
-# 4. स्टेट मैनेजमेंट
+# 4. सेशन स्टेट
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# 5. मुख्य टैब इंटरफेस
 tab_chat, tab_studio = st.tabs(["💬 Diva AI चैट", "📸 प्रो स्टूडियो (Face-Safe)"])
 
-# ==================== टैब 1: AI चैट ====================
+# ==================== टैब 1: चैट बार (कैमरा, गैलरी, वॉइस & टेक्स्ट) ====================
 with tab_chat:
-    st.markdown("""
-    <div class="title-box">
-        <div class="main-heading">✨ Diva AI स्मार्ट असिस्टेंट</div>
-        <div class="sub-heading">स्टडी नोट्स, कोडिंग, बिज़नेस या कुछ भी पूछें।</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # चैट हिस्ट्री
+    # चैट इतिहास
     for msg in st.session_state.chat_history:
-        avatar = "👤" if msg["role"] == "user" else "⚡"
+        avatar = "👤" if msg["role"] == "user" else "✨"
         with st.chat_message(msg["role"], avatar=avatar):
+            if "image" in msg and msg["image"]:
+                st.image(msg["image"], width=250)
             st.markdown(msg["content"])
 
-    # वॉइस व टेक्स्ट इनपुट
-    voice = st.audio_input("वॉइस इनपुट", key="chat_voice")
-    text_in = st.chat_input("Diva से कुछ भी पूछें...")
+    st.markdown('<div class="input-panel">', unsafe_allow_html=True)
+    col_attach, col_voice = st.columns([1, 1])
+    
+    with col_attach:
+        # गैलरी / कैमरा अटैचमेंट बटन
+        uploaded_media = st.file_uploader("📎 कैमरा / गैलरी से फ़ोटो जोड़ें", type=["jpg", "jpeg", "png"], key="chat_media")
+    
+    with col_voice:
+        # वॉइस इनपुट
+        audio_in = st.audio_input("🎙️ वॉइस मैसेज रिकॉर्ड करें", key="voice_bar")
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    if text_in or voice:
-        user_msg = text_in if text_in else "🎙️ [वॉइस संदेश]"
-        st.session_state.chat_history.append({"role": "user", "content": user_msg})
+    # मुख्य टेक्स्ट इनपुट बार
+    text_prompt = st.chat_input("Diva से कुछ भी पूछें...")
+
+    # जब यूज़र मैसेज, फ़ोटो या वॉइस भेजे
+    if text_prompt or audio_in or uploaded_media:
+        user_text = text_prompt if text_prompt else ("🎙️ [वॉइस संदेश]" if audio_in else "📎 [फ़ोटो अपलोड]")
+        
+        chat_entry = {"role": "user", "content": user_text, "image": None}
+        input_img = None
+        if uploaded_media:
+            input_img = Image.open(uploaded_media)
+            chat_entry["image"] = input_img
+
+        st.session_state.chat_history.append(chat_entry)
+        
         with st.chat_message("user", avatar="👤"):
-            st.write(user_msg)
+            if input_img:
+                st.image(input_img, width=250)
+            st.write(user_text)
 
-        with st.chat_message("assistant", avatar="⚡"):
-            def stream_response():
+        with st.chat_message("assistant", avatar="✨"):
+            def stream_multimodal_reply():
                 payload = []
-                if voice and not text_in:
-                    payload.append({"mime_type": "audio/wav", "data": voice.read()})
-                    payload.append("कृपया इस वॉइस इनपुट का हिंदी में विस्तार से उत्तर दें।")
-                else:
-                    payload.append(text_in)
-
-                # आपके चुने हुए मॉडल: 3.6-flash और 3.8-flash
-                target_models = ["gemini-3.6-flash", "gemini-3.8-flash"]
-                worked = False
                 
-                for m_name in target_models:
+                # इमेज जोड़ना
+                if input_img:
+                    payload.append(input_img)
+                    
+                # वॉइस या टेक्स्ट जोड़ना
+                if audio_in and not text_prompt:
+                    payload.append({"mime_type": "audio/wav", "data": audio_in.read()})
+                    payload.append("कृपया इस वॉइस मैसेज/फ़ोटो को देखकर विस्तार से उत्तर दें।")
+                else:
+                    msg_to_send = text_prompt if text_prompt else "इस फ़ोटो को समझकर पूरा विवरण दें।"
+                    payload.append(msg_to_send)
+
+                # ऑटो-फ़ॉलबैक (3.6 और 3.8 मॉडल)
+                models_to_try = ["gemini-3.6-flash", "gemini-3.8-flash"]
+                responded = False
+                
+                for m_name in models_to_try:
                     try:
                         m = genai.GenerativeModel(m_name)
                         res = m.generate_content(payload, stream=True)
                         for chunk in res:
                             if chunk.text:
                                 yield chunk.text
-                        worked = True
+                        responded = True
                         break
                     except Exception:
                         continue
 
-                if not worked:
-                    yield "⏳ Google कोटा लिमिट है। कृपया 10-15 सेकंड रुककर दोबारा पूछें।"
+                if not responded:
+                    yield "⏳ Google कोटा सीमा पर है। कृपया 10-15 सेकंड रुककर दोबारा प्रयास करें।"
 
-            full_reply = st.write_stream(stream_response)
-            st.session_state.chat_history.append({"role": "assistant", "content": full_reply})
+            full_reply = st.write_stream(stream_multimodal_reply)
+            st.session_state.chat_history.append({"role": "assistant", "content": full_reply, "image": None})
 
-# ==================== टैब 2: प्रो स्टूडियो ====================
+# ==================== टैब 2: प्रो स्टूडियो (फ़ेस-सेफ़ बैकग्राउंड चेंजर) ====================
 with tab_studio:
-    st.markdown("""
-    <div class="title-box">
-        <div class="main-heading">📸 फ़ेस-सेफ़ बैकग्राउंड स्टूडियो</div>
-        <div class="sub-heading">चेहरा 100% सेफ़ रहेगा — केवल बैकग्राउंड बदलेगा।</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### 📸 फेस-सेफ़ बैकग्राउंड स्टूडियो")
+    st.caption("चेहरा 100% सुरक्षित रहेगा — पासपोर्ट या कस्टम बैकग्राउंड लगाएँ।")
 
-    up_img = st.file_uploader("फ़ोटो अपलोड करें", type=["jpg", "jpeg", "png"])
-    if up_img:
-        orig = Image.open(up_img)
+    studio_img = st.file_uploader("फ़ोटो चुनें", type=["jpg", "jpeg", "png"], key="studio_uploader")
+    if studio_img:
+        orig = Image.open(studio_img)
         c1, c2 = st.columns(2)
         with c1:
             st.image(orig, caption="मूल फ़ोटो", use_container_width=True)
 
         bg_mode = st.selectbox(
-            "नया बैकग्राउंड चुनें:",
+            "नया बैकग्राउंड रंग चुनें:",
             ["ट्रांसपेरेंट (PNG)", "सफ़ेद (Passport White)", "नेवी ब्लू (Studio Blue)", "सॉफ़्ट ग्रे (Modern Gray)", "कस्टम कलर व्हील"]
         )
 
@@ -124,7 +153,7 @@ with tab_studio:
             hex_color = st.color_picker("पसंदीदा रंग चुनें", "#ffffff")
 
         if st.button("✨ बैकग्राउंड बदलें (1-Click)", use_container_width=True):
-            with st.spinner("प्रोसेसिंग जारी है..."):
+            with st.spinner("AI बैकग्राउंड बदल रहा है..."):
                 try:
                     from rembg import remove
                     b_in = io.BytesIO()
@@ -153,9 +182,9 @@ with tab_studio:
                         fmt = "PNG" if bg_mode == "ट्रांसपेरेंट (PNG)" else "JPEG"
                         final_res.save(b_out, format=fmt)
                         st.download_button(
-                            label="📥 फ़ोटो डाउनलोड करें",
+                            label="📥 एडिटेड फ़ोटो डाउनलोड करें",
                             data=b_out.getvalue(),
-                            file_name=f"edited_photo.{fmt.lower()}",
+                            file_name=f"diva_photo.{fmt.lower()}",
                             mime=f"image/{fmt.lower()}",
                             use_container_width=True
                         )
