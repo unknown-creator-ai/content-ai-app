@@ -1,978 +1,164 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from PIL import Image
 import io
-import uuid
 
-# =========================================================
-# PAGE CONFIG
-# =========================================================
-
+# 1. पेज सेटअप (मोबाइल पर साइडबार डिफ़ॉल्ट बंद ताकि स्क्रीन न ढके)
 st.set_page_config(
-    page_title="Diva AI",
+    page_title="Diva AI Pro",
     page_icon="✨",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# =========================================================
-# CSS - FULL SCREEN MODERN UI
-# =========================================================
-
+# 2. कस्टम मोबाइल CSS (सॉफ्ट और क्लीन लुक)
 st.markdown("""
 <style>
-
-html, body, [class*="css"] {
-    font-family: Inter, Arial, sans-serif;
-}
-
-.stApp {
-    background:
-        radial-gradient(
-            circle at 50% -15%,
-            #292044 0%,
-            #12131b 38%,
-            #08090d 80%
-        );
-    color: #ffffff;
-}
-
-header[data-testid="stHeader"] {
-    background: transparent;
-}
-
-.block-container {
-    max-width: 100% !important;
-    padding: 12px 3vw 100px 3vw !important;
-}
-
-/* Sidebar */
-
-section[data-testid="stSidebar"] {
-    background: #0e1016;
-    border-right: 1px solid #272a35;
-}
-
-/* Logo */
-
-.diva-logo {
-    font-size: 30px;
-    font-weight: 900;
-    background: linear-gradient(
-        90deg,
-        #ff4f9a,
-        #a36cff,
-        #5bdcff
-    );
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.diva-small {
-    color: #858b9b;
-    font-size: 13px;
-}
-
-/* Top bar */
-
-.topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 4px 14px;
-    border-bottom: 1px solid #242732;
-    margin-bottom: 10px;
-}
-
-.top-title {
-    font-size: 20px;
-    font-weight: 750;
-}
-
-.online {
-    color: #55e69a;
-    font-size: 13px;
-}
-
-/* Welcome */
-
-.welcome {
-    min-height: 55vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    text-align: center;
-}
-
-.welcome-icon {
-    font-size: 65px;
-}
-
-.welcome-title {
-    margin-top: 10px;
-    font-size: clamp(36px, 6vw, 64px);
-    font-weight: 900;
-    background: linear-gradient(
-        90deg,
-        #ff62a8,
-        #a879ff,
-        #5bdcff
-    );
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-
-.welcome-subtitle {
-    margin-top: 8px;
-    color: #969baa;
-    font-size: 16px;
-}
-
-/* Feature cards */
-
-.feature {
-    background: rgba(25, 27, 36, .75);
-    border: 1px solid #2b2e39;
-    border-radius: 18px;
-    padding: 18px;
-    min-height: 110px;
-    transition: .2s;
-}
-
-.feature:hover {
-    border-color: #9a6cff;
-    transform: translateY(-2px);
-}
-
-.feature-title {
-    font-size: 16px;
-    font-weight: 750;
-}
-
-.feature-text {
-    color: #8f95a5;
-    font-size: 13px;
-    margin-top: 6px;
-}
-
-/* Chat */
-
-[data-testid="stChatMessage"] {
-    max-width: 900px !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
-    border-radius: 20px;
-}
-
-[data-testid="stChatMessageContent"] {
-    font-size: 16px;
-    line-height: 1.65;
-}
-
-/* Chat input */
-
-[data-testid="stChatInput"] {
-    max-width: 900px !important;
-    margin-left: auto !important;
-    margin-right: auto !important;
-}
-
-[data-testid="stChatInput"] textarea {
-    background: #181a22 !important;
-    color: #ffffff !important;
-    border: 1px solid #363946 !important;
-    border-radius: 20px !important;
-}
-
-/* Buttons */
-
-.stButton > button {
-    border-radius: 13px;
-    background: #171920;
-    color: #ffffff;
-    border: 1px solid #30333d;
-}
-
-.stButton > button:hover {
-    border-color: #ff579f;
-    color: #ff75b1;
-}
-
-/* Mobile */
-
-@media(max-width: 700px) {
-
-    .block-container {
-        padding: 8px 10px 90px 10px !important;
+    .stApp { background-color: #0f1117; color: #ffffff; }
+    .title-box {
+        background: #1a1f2c;
+        padding: 14px 18px;
+        border-radius: 12px;
+        margin-bottom: 12px;
+        border: 1px solid #2d3748;
     }
-
-    .welcome {
-        min-height: 48vh;
-    }
-
-    .welcome-icon {
-        font-size: 48px;
-    }
-
-    .welcome-title {
-        font-size: 40px;
-    }
-
-    [data-testid="stChatMessage"] {
-        max-width: 100% !important;
-    }
-
-    [data-testid="stChatInput"] {
-        max-width: 100% !important;
-    }
-}
-
+    .main-heading { font-size: 20px; font-weight: 700; color: #60a5fa; }
+    .sub-heading { font-size: 13px; color: #9ca3af; }
 </style>
 """, unsafe_allow_html=True)
 
-# =========================================================
-# API KEY
-# =========================================================
-
+# 3. Gemini API सेटअप
 api_key = st.secrets.get("GEMINI_API_KEY")
-
 if not api_key:
-    st.error(
-        "🔑 GEMINI_API_KEY नहीं मिली।\n\n"
-        "Streamlit Secrets में GEMINI_API_KEY डालें।"
-    )
+    st.error("⚠️ GEMINI_API_KEY नहीं मिली! Streamlit Secrets चेक करें।")
     st.stop()
 
-try:
-    client = genai.Client(api_key=api_key)
-except Exception as e:
-    st.error(f"Gemini connection error: {e}")
-    st.stop()
+genai.configure(api_key=api_key)
 
-# =========================================================
-# SESSION STATE
-# =========================================================
+# 4. स्टेट मैनेजमेंट
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+# 5. मुख्य टैब इंटरफेस
+tab_chat, tab_studio = st.tabs(["💬 Diva AI चैट", "📸 प्रो स्टूडियो (Face-Safe)"])
 
-if "chat_id" not in st.session_state:
-    st.session_state.chat_id = str(uuid.uuid4())
-
-if "model" not in st.session_state:
-    st.session_state.model = "gemini-3.8-flash"
-
-# =========================================================
-# SYSTEM PROMPT
-# =========================================================
-
-SYSTEM_PROMPT = """
-You are Diva AI Pro.
-
-You are a highly capable, friendly and intelligent AI assistant.
-
-Language:
-- Understand Hindi.
-- Understand Hinglish.
-- Understand English.
-- Reply naturally in the user's language.
-
-Rules:
-- Give accurate and useful answers.
-- Do not unnecessarily repeat the user's question.
-- Simple questions should receive concise answers.
-- Complex questions should receive detailed answers.
-- Use Markdown when useful.
-- Use headings and bullet points when useful.
-
-Coding:
-- Provide complete working code.
-- Clearly explain where code should be placed.
-- Mention required packages when needed.
-- Never invent package names or APIs.
-
-Images:
-- Analyze uploaded images carefully.
-- Only describe things that are actually visible.
-- If something cannot be determined, say so.
-
-Important:
-- Never claim you performed an action that you cannot perform.
-- Be honest about limitations.
-"""
-
-# =========================================================
-# SIDEBAR
-# =========================================================
-
-with st.sidebar:
-
-    st.markdown(
-        '<div class="diva-logo">✨ Diva AI</div>',
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        '<div class="diva-small">'
-        'Your intelligent AI companion'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    st.write("")
-
-    # New Chat
-
-    if st.button(
-        "＋  नई चैट",
-        use_container_width=True
-    ):
-
-        st.session_state.messages = []
-        st.session_state.chat_id = str(uuid.uuid4())
-
-        st.rerun()
-
-    st.divider()
-
-    st.markdown("### ⚙️ Settings")
-
-    model = st.selectbox(
-        "Model",
-        [
-            "gemini-3.8-flash"
-        ],
-        index=0
-    )
-
-    st.session_state.model = model
-
-    st.divider()
-
-    st.markdown("### ✨ Features")
-
-    st.caption("● AI Chat")
-    st.caption("● Image Understanding")
-    st.caption("● Voice Input")
-    st.caption("● Google Search")
-    st.caption("● Photo Studio")
-
-    st.divider()
-
-    if st.button(
-        "🗑️ Clear Conversation",
-        use_container_width=True
-    ):
-
-        st.session_state.messages = []
-
-        st.rerun()
-
-# =========================================================
-# TOP BAR
-# =========================================================
-
-st.markdown(
-    """
-    <div class="topbar">
-
-        <div class="top-title">
-            ✨ Diva AI
-        </div>
-
-        <div class="online">
-            ● Online
-        </div>
-
+# ==================== टैब 1: AI चैट ====================
+with tab_chat:
+    st.markdown("""
+    <div class="title-box">
+        <div class="main-heading">✨ Diva AI स्मार्ट असिस्टेंट</div>
+        <div class="sub-heading">स्टडी नोट्स, कोडिंग, बिज़नेस या कुछ भी पूछें।</div>
     </div>
-    """,
-    unsafe_allow_html=True
-)
-
-# =========================================================
-# TABS
-# =========================================================
-
-chat_tab, photo_tab = st.tabs(
-    [
-        "💬 Chat",
-        "🎨 Photo Studio"
-    ]
-)
-
-# =========================================================
-# CHAT
-# =========================================================
-
-with chat_tab:
-
-    # -----------------------------------------------------
-    # Welcome
-    # -----------------------------------------------------
-
-    if not st.session_state.messages:
-
-        st.markdown(
-            """
-            <div class="welcome">
-
-                <div class="welcome-icon">
-                    ✨
-                </div>
-
-                <div class="welcome-title">
-                    Hello, I'm Diva
-                </div>
-
-                <div class="welcome-subtitle">
-                    Ask me anything. I'm here to help.
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        c1, c2, c3 = st.columns(3)
-
-        with c1:
-
-            st.markdown(
-                """
-                <div class="feature">
-
-                    <div class="feature-title">
-                        💻 Coding
-                    </div>
-
-                    <div class="feature-text">
-                        Python, apps, websites और debugging.
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        with c2:
-
-            st.markdown(
-                """
-                <div class="feature">
-
-                    <div class="feature-title">
-                        🧠 Ideas
-                    </div>
-
-                    <div class="feature-text">
-                        Study, business और creative ideas.
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        with c3:
-
-            st.markdown(
-                """
-                <div class="feature">
-
-                    <div class="feature-title">
-                        📸 Vision
-                    </div>
-
-                    <div class="feature-text">
-                        Images को समझें और analyze करें।
-                    </div>
-
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-    # -----------------------------------------------------
-    # History
-    # -----------------------------------------------------
-
-    for message in st.session_state.messages:
-
-        avatar = (
-            "👤"
-            if message["role"] == "user"
-            else "✨"
-        )
-
-        with st.chat_message(
-            message["role"],
-            avatar=avatar
-        ):
-
-            st.markdown(
-                message["content"]
-            )
-
-    # -----------------------------------------------------
-    # Image attachment
-    # -----------------------------------------------------
-
-    attached_image = st.file_uploader(
-        "📎 Image",
-        type=[
-            "png",
-            "jpg",
-            "jpeg",
-            "webp"
-        ],
-        key="chat_image",
-        label_visibility="collapsed"
-    )
-
-    if attached_image:
-
-        preview = Image.open(
-            attached_image
-        )
-
-        st.image(
-            preview,
-            width=260,
-            caption="Attached image"
-        )
-
-    # -----------------------------------------------------
-    # Voice
-    # -----------------------------------------------------
-
-    voice = st.audio_input(
-        "🎙️ Voice",
-        key="chat_voice"
-    )
-
-    # -----------------------------------------------------
-    # Chat input
-    # -----------------------------------------------------
-
-    prompt = st.chat_input(
-        "Diva से कुछ भी पूछें..."
-    )
-
-    # -----------------------------------------------------
-    # PROCESS
-    # -----------------------------------------------------
-
-    if prompt or voice:
-
-        user_text = (
-            prompt
-            if prompt
-            else "🎙️ Voice message"
-        )
-
-        # Save user message
-
-        st.session_state.messages.append(
-            {
-                "role": "user",
-                "content": user_text
-            }
-        )
-
-        with st.chat_message(
-            "user",
-            avatar="👤"
-        ):
-
-            st.markdown(user_text)
-
-            if attached_image:
-
-                st.image(
-                    Image.open(attached_image),
-                    width=260
-                )
-
-        # -------------------------------------------------
-        # Prepare current request
-        # -------------------------------------------------
-
-        parts = []
-
-        if prompt:
-
-            parts.append(
-                types.Part.from_text(
-                    text=prompt
-                )
-            )
-
-        # Image
-
-        if attached_image:
-
-            image_bytes = attached_image.getvalue()
-
-            parts.append(
-                types.Part.from_bytes(
-                    data=image_bytes,
-                    mime_type=attached_image.type
-                )
-            )
-
-        # Voice
-
-        if voice:
-
-            audio_bytes = voice.getvalue()
-
-            parts.append(
-                types.Part.from_bytes(
-                    data=audio_bytes,
-                    mime_type=(
-                        voice.type
-                        or "audio/wav"
-                    )
-                )
-            )
-
-            parts.append(
-                types.Part.from_text(
-                    text=(
-                        "इस voice message को समझकर "
-                        "उपयुक्त उत्तर दें।"
-                    )
-                )
-            )
-
-        if not parts:
-
-            parts.append(
-                types.Part.from_text(
-                    text=user_text
-                )
-            )
-
-        # -------------------------------------------------
-        # AI
-        # -------------------------------------------------
-
-        with st.chat_message(
-            "assistant",
-            avatar="✨"
-        ):
-
-            try:
-
-                # Build previous conversation
-
-                contents = []
-
-                for message in (
-                    st.session_state.messages[:-1]
-                ):
-
-                    role = (
-                        "user"
-                        if message["role"] == "user"
-                        else "model"
-                    )
-
-                    contents.append(
-                        types.Content(
-                            role=role,
-                            parts=[
-                                types.Part.from_text(
-                                    text=message["content"]
-                                )
-                            ]
-                        )
-                    )
-
-                # Current request
-
-                contents.append(
-                    types.Content(
-                        role="user",
-                        parts=parts
-                    )
-                )
-
-                # Generate
-
-                response = client.models.generate_content(
-                    model=st.session_state.model,
-                    contents=contents,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_PROMPT,
-                        temperature=0.7,
-                        tools=[
-                            types.Tool(
-                                google_search=types.GoogleSearch()
-                            )
-                        ]
-                    )
-                )
-
-                answer = ""
-
-                if response.text:
-
-                    answer = response.text
-
-                if not answer:
-
-                    answer = (
-                        "मुझे इस बार कोई उत्तर नहीं मिला। "
-                        "कृपया दोबारा कोशिश करें।"
-                    )
-
-                st.markdown(answer)
-
-                # Save assistant
-
-                st.session_state.messages.append(
-                    {
-                        "role": "assistant",
-                        "content": answer
-                    }
-                )
-
-            except Exception as e:
-
-                error = str(e)
-
-                if "404" in error:
-
-                    st.error(
-                        "❌ चुना हुआ Gemini model उपलब्ध नहीं है। "
-                        "Google AI Studio में उपलब्ध model check करें।"
-                    )
-
-                elif "429" in error:
-
-                    st.error(
-                        "⏳ Gemini API quota/limit पूरी हो गई है। "
-                        "कुछ देर बाद फिर कोशिश करें।"
-                    )
-
-                elif (
-                    "401" in error
-                    or "403" in error
-                    or "API key" in error
-                ):
-
-                    st.error(
-                        "🔑 Gemini API key में समस्या है। "
-                        "Streamlit Secrets में key check करें।"
-                    )
-
+    """, unsafe_allow_html=True)
+
+    # चैट हिस्ट्री
+    for msg in st.session_state.chat_history:
+        avatar = "👤" if msg["role"] == "user" else "⚡"
+        with st.chat_message(msg["role"], avatar=avatar):
+            st.markdown(msg["content"])
+
+    # वॉइस व टेक्स्ट इनपुट
+    voice = st.audio_input("वॉइस इनपुट", key="chat_voice")
+    text_in = st.chat_input("Diva से कुछ भी पूछें...")
+
+    if text_in or voice:
+        user_msg = text_in if text_in else "🎙️ [वॉइस संदेश]"
+        st.session_state.chat_history.append({"role": "user", "content": user_msg})
+        with st.chat_message("user", avatar="👤"):
+            st.write(user_msg)
+
+        with st.chat_message("assistant", avatar="⚡"):
+            def stream_response():
+                payload = []
+                if voice and not text_in:
+                    payload.append({"mime_type": "audio/wav", "data": voice.read()})
+                    payload.append("कृपया इस वॉइस इनपुट का हिंदी में विस्तार से उत्तर दें।")
                 else:
+                    payload.append(text_in)
 
-                    st.error(
-                        "⚠️ Diva AI में समस्या आई:\n\n"
-                        + error
-                    )
+                # आपके चुने हुए मॉडल: 3.6-flash और 3.8-flash
+                target_models = ["gemini-3.6-flash", "gemini-3.8-flash"]
+                worked = False
+                
+                for m_name in target_models:
+                    try:
+                        m = genai.GenerativeModel(m_name)
+                        res = m.generate_content(payload, stream=True)
+                        for chunk in res:
+                            if chunk.text:
+                                yield chunk.text
+                        worked = True
+                        break
+                    except Exception:
+                        continue
 
-# =========================================================
-# PHOTO STUDIO
-# =========================================================
+                if not worked:
+                    yield "⏳ Google कोटा लिमिट है। कृपया 10-15 सेकंड रुककर दोबारा पूछें।"
 
-with photo_tab:
+            full_reply = st.write_stream(stream_response)
+            st.session_state.chat_history.append({"role": "assistant", "content": full_reply})
 
-    st.markdown(
-        "## 🎨 Diva Photo Studio"
-    )
+# ==================== टैब 2: प्रो स्टूडियो ====================
+with tab_studio:
+    st.markdown("""
+    <div class="title-box">
+        <div class="main-heading">📸 फ़ेस-सेफ़ बैकग्राउंड स्टूडियो</div>
+        <div class="sub-heading">चेहरा 100% सेफ़ रहेगा — केवल बैकग्राउंड बदलेगा।</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.caption(
-        "Photo का background remove करके नया background लगाएँ।"
-    )
+    up_img = st.file_uploader("फ़ोटो अपलोड करें", type=["jpg", "jpeg", "png"])
+    if up_img:
+        orig = Image.open(up_img)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.image(orig, caption="मूल फ़ोटो", use_container_width=True)
 
-    photo = st.file_uploader(
-        "📸 Photo upload करें",
-        type=[
-            "jpg",
-            "jpeg",
-            "png",
-            "webp"
-        ],
-        key="photo_editor"
-    )
-
-    if photo:
-
-        original = Image.open(
-            photo
-        ).convert("RGBA")
-
-        left, right = st.columns(2)
-
-        with left:
-
-            st.image(
-                original,
-                caption="Original",
-                use_container_width=True
-            )
-
-        bg = st.selectbox(
-            "🎨 नया Background",
-            [
-                "Transparent",
-                "White",
-                "Passport Blue",
-                "Light Gray",
-                "Black",
-                "Pink",
-                "Purple"
-            ]
+        bg_mode = st.selectbox(
+            "नया बैकग्राउंड चुनें:",
+            ["ट्रांसपेरेंट (PNG)", "सफ़ेद (Passport White)", "नेवी ब्लू (Studio Blue)", "सॉफ़्ट ग्रे (Modern Gray)", "कस्टम कलर व्हील"]
         )
 
-        if st.button(
-            "✨ Background बदलें",
-            type="primary",
-            use_container_width=True
-        ):
+        hex_color = "#ffffff"
+        if bg_mode == "कस्टम कलर व्हील":
+            hex_color = st.color_picker("पसंदीदा रंग चुनें", "#ffffff")
 
-            with st.spinner(
-                "Background remove हो रहा है..."
-            ):
-
+        if st.button("✨ बैकग्राउंड बदलें (1-Click)", use_container_width=True):
+            with st.spinner("प्रोसेसिंग जारी है..."):
                 try:
-
                     from rembg import remove
+                    b_in = io.BytesIO()
+                    orig.save(b_in, format="PNG")
+                    cutout = Image.open(io.BytesIO(remove(b_in.getvalue()))).convert("RGBA")
 
-                    buffer = io.BytesIO()
-
-                    original.save(
-                        buffer,
-                        format="PNG"
-                    )
-
-                    result_bytes = remove(
-                        buffer.getvalue()
-                    )
-
-                    foreground = Image.open(
-                        io.BytesIO(result_bytes)
-                    ).convert("RGBA")
-
-                    colors = {
-
-                        "White":
-                            (255, 255, 255),
-
-                        "Passport Blue":
-                            (20, 50, 120),
-
-                        "Light Gray":
-                            (220, 220, 220),
-
-                        "Black":
-                            (10, 10, 10),
-
-                        "Pink":
-                            (255, 105, 180),
-
-                        "Purple":
-                            (110, 70, 180)
-                    }
-
-                    if bg == "Transparent":
-
-                        final = foreground
-                        file_format = "PNG"
-                        mime = "image/png"
-
+                    if bg_mode == "ट्रांसपेरेंट (PNG)":
+                        final_res = cutout
                     else:
+                        color_presets = {
+                            "सफ़ेद (Passport White)": (255, 255, 255),
+                            "नेवी ब्लू (Studio Blue)": (24, 52, 115),
+                            "सॉफ़्ट ग्रे (Modern Gray)": (224, 226, 230),
+                        }
+                        rgb = color_presets.get(bg_mode)
+                        if not rgb:
+                            rgb = tuple(int(hex_color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
 
-                        background = Image.new(
-                            "RGBA",
-                            foreground.size,
-                            colors[bg] + (255,)
-                        )
+                        bg_layer = Image.new("RGBA", cutout.size, rgb + (255,))
+                        bg_layer.paste(cutout, (0, 0), mask=cutout)
+                        final_res = bg_layer.convert("RGB")
 
-                        background.paste(
-                            foreground,
-                            (0, 0),
-                            foreground
-                        )
-
-                        final = background.convert(
-                            "RGB"
-                        )
-
-                        file_format = "JPEG"
-                        mime = "image/jpeg"
-
-                    with right:
-
-                        st.image(
-                            final,
-                            caption="Final Result",
-                            use_container_width=True
-                        )
-
-                        output = io.BytesIO()
-
-                        if file_format == "PNG":
-
-                            final.save(
-                                output,
-                                format="PNG",
-                                optimize=True
-                            )
-
-                        else:
-
-                            final.save(
-                                output,
-                                format="JPEG",
-                                quality=95,
-                                optimize=True
-                            )
-
+                    with c2:
+                        st.image(final_res, caption="एडिटेड फ़ोटो", use_container_width=True)
+                        b_out = io.BytesIO()
+                        fmt = "PNG" if bg_mode == "ट्रांसपेरेंट (PNG)" else "JPEG"
+                        final_res.save(b_out, format=fmt)
                         st.download_button(
-                            "📥 Download Photo",
-                            data=output.getvalue(),
-                            file_name=(
-                                "diva_edited."
-                                + file_format.lower()
-                            ),
-                            mime=mime,
+                            label="📥 फ़ोटो डाउनलोड करें",
+                            data=b_out.getvalue(),
+                            file_name=f"edited_photo.{fmt.lower()}",
+                            mime=f"image/{fmt.lower()}",
                             use_container_width=True
                         )
+                except Exception as ex:
+                    st.error(f"एरर आया: {ex}")
 
-                except ImportError:
-
-                    st.error(
-                        "❌ rembg install नहीं है। "
-                        "requirements.txt check करें।"
-                    )
-
-                except Exception as e:
-
-                    st.error(
-                        "❌ Photo processing error:\n\n"
-                        + str(e)
-                    )
-
-# =========================================================
-# FOOTER
-# =========================================================
-
-st.markdown(
-    """
-    <div style="
-        text-align:center;
-        color:#666b78;
-        font-size:12px;
-        padding:30px 0;
-    ">
-        ✨ Diva AI • Smart • Creative • Helpful
-    </div>
-    """,
-    unsafe_allow_html=True
-)
