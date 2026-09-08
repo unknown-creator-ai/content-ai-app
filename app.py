@@ -1,11 +1,11 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 from PIL import Image
 import io
-import time
+import base64
 
 # ============================================================
-# PAGE CONFIG
+# PAGE SETUP
 # ============================================================
 
 st.set_page_config(
@@ -22,126 +22,99 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-    /* Main app */
-    .stApp {
-        background: #0b0f19;
-        color: #ffffff;
-    }
+.stApp {
+    background: #0b0f19;
+    color: white;
+}
 
-    /* Sidebar */
-    section[data-testid="stSidebar"] {
-        background: #101522;
-        border-right: 1px solid #252b3a;
-    }
+section[data-testid="stSidebar"] {
+    background: #101522;
+    border-right: 1px solid #252b3a;
+}
 
-    /* Header */
-    .diva-header {
-        padding: 15px 0 5px 0;
-    }
+.diva-title {
+    font-size: 34px;
+    font-weight: 900;
+    background: linear-gradient(
+        90deg,
+        #ff4b91,
+        #9b6cff,
+        #4cc9f0
+    );
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
 
-    .diva-title {
-        font-size: 32px;
-        font-weight: 800;
-        background: linear-gradient(
-            90deg,
-            #ff4b91,
-            #9b6cff,
-            #4cc9f0
-        );
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
+.diva-subtitle {
+    color: #8f98aa;
+    font-size: 14px;
+    margin-bottom: 25px;
+}
 
-    .diva-subtitle {
-        color: #8f98aa;
-        font-size: 14px;
-    }
+.feature-card {
+    background: #131927;
+    border: 1px solid #252c3d;
+    border-radius: 18px;
+    padding: 20px;
+    margin-bottom: 15px;
+}
 
-    /* Chat messages */
-    [data-testid="stChatMessage"] {
-        border-radius: 18px;
-        padding: 8px;
-        margin-bottom: 8px;
-    }
+.stButton > button {
+    border-radius: 12px;
+    border: 1px solid #303749;
+    background: #171d2b;
+    color: white;
+}
 
-    /* Buttons */
-    .stButton > button {
-        border-radius: 12px;
-        border: 1px solid #303749;
-        background: #171d2b;
-        color: white;
-        transition: 0.2s;
-    }
+.stButton > button:hover {
+    border-color: #ff4b91;
+    color: #ff75aa;
+}
 
-    .stButton > button:hover {
-        border-color: #ff4b91;
-        color: #ff75aa;
-    }
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+}
 
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background: transparent;
-    }
+.stTabs [data-baseweb="tab"] {
+    background: #151b28;
+    border-radius: 12px;
+    padding: 10px 18px;
+}
 
-    .stTabs [data-baseweb="tab"] {
-        background: #151b28;
-        border-radius: 12px;
-        padding: 10px 18px;
-        color: #aab2c3;
-    }
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(
+        90deg,
+        #ff3f8e,
+        #8c5cff
+    ) !important;
+    color: white !important;
+}
 
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(
-            90deg,
-            #ff3f8e,
-            #8c5cff
-        ) !important;
-        color: white !important;
-    }
-
-    /* Cards */
-    .feature-card {
-        background: #131927;
-        border: 1px solid #252c3d;
-        border-radius: 16px;
-        padding: 18px;
-        margin-bottom: 12px;
-    }
-
-    .feature-title {
-        font-size: 18px;
-        font-weight: 700;
-    }
-
-    .feature-text {
-        color: #929bad;
-        font-size: 13px;
-    }
-
-    /* Status */
-    .online {
-        color: #55e69b;
-        font-size: 13px;
-    }
+[data-testid="stChatMessage"] {
+    border-radius: 18px;
+}
 
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================
-# API SETUP
+# GEMINI API
 # ============================================================
 
 api_key = st.secrets.get("GEMINI_API_KEY")
 
 if not api_key:
     st.error(
-        "⚠️ GEMINI_API_KEY नहीं मिली। "
+        "⚠️ GEMINI_API_KEY नहीं मिली।\n\n"
         "`.streamlit/secrets.toml` में API key डालें।"
     )
     st.stop()
 
-genai.configure(api_key=api_key)
+try:
+    client = genai.Client(api_key=api_key)
+except Exception as e:
+    st.error(f"Gemini Client error: {e}")
+    st.stop()
 
 # ============================================================
 # SESSION STATE
@@ -150,24 +123,39 @@ genai.configure(api_key=api_key)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "system_prompt" not in st.session_state:
-    st.session_state.system_prompt = """
-You are Diva AI, a highly capable, friendly and intelligent AI assistant.
-
-Rules:
-- Give accurate and useful answers.
-- Understand Hindi, Hinglish and English.
-- Keep answers clear and well structured.
-- Use Markdown when useful.
-- If the user asks for code, provide complete working code.
-- Never claim to have performed an action you cannot perform.
-"""
+if "interaction_id" not in st.session_state:
+    st.session_state.interaction_id = None
 
 if "selected_model" not in st.session_state:
-    st.session_state.selected_model = "gemini-2.0-flash"
+    st.session_state.selected_model = "gemini-3.6-flash"
 
-if "temperature" not in st.session_state:
-    st.session_state.temperature = 0.7
+if "thinking_level" not in st.session_state:
+    st.session_state.thinking_level = "medium"
+
+# ============================================================
+# SYSTEM PROMPT
+# ============================================================
+
+SYSTEM_PROMPT = """
+You are Diva AI Pro.
+
+You are a smart, friendly and helpful AI assistant.
+
+You understand Hindi, Hinglish and English.
+
+Rules:
+
+1. Reply in the language used by the user.
+2. Give accurate and useful answers.
+3. Keep simple answers short.
+4. Give detailed answers when needed.
+5. Use Markdown when useful.
+6. For coding questions, provide complete working code.
+7. Explain difficult things simply.
+8. If an image is provided, analyze it carefully.
+9. Never pretend you performed an action that you cannot perform.
+10. Be friendly and professional.
+"""
 
 # ============================================================
 # SIDEBAR
@@ -180,96 +168,99 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        '<div class="online">● AI Online</div>',
-        unsafe_allow_html=True
-    )
-
-    st.divider()
-
-    st.markdown("### ⚙️ AI Settings")
-
-    model_options = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro"
-    ]
-
-    selected_model = st.selectbox(
-        "AI Model",
-        model_options,
-        index=(
-            model_options.index(st.session_state.selected_model)
-            if st.session_state.selected_model in model_options
-            else 0
-        )
-    )
-
-    st.session_state.selected_model = selected_model
-
-    temperature = st.slider(
-        "Creativity",
-        min_value=0.0,
-        max_value=1.0,
-        value=st.session_state.temperature,
-        step=0.1
-    )
-
-    st.session_state.temperature = temperature
-
-    st.divider()
-
-    st.markdown("### 🧠 Personality")
-
-    system_prompt = st.text_area(
-        "System Instructions",
-        value=st.session_state.system_prompt,
-        height=180
-    )
-
-    st.session_state.system_prompt = system_prompt
+    st.caption("● AI Online")
 
     st.divider()
 
     # New chat
     if st.button(
-        "🆕 New Chat",
+        "🆕 नई चैट",
         use_container_width=True
     ):
+
         st.session_state.messages = []
+        st.session_state.interaction_id = None
+
         st.rerun()
 
-    # Clear chat
+    # Clear
     if st.button(
-        "🗑️ Clear Conversation",
+        "🗑️ चैट साफ करें",
         use_container_width=True
     ):
+
         st.session_state.messages = []
+        st.session_state.interaction_id = None
+
         st.rerun()
 
     st.divider()
 
-    st.caption("Diva AI Pro 2.0")
-    st.caption("Built with Python + Gemini")
+    st.subheader("⚙️ AI Settings")
+
+    model_options = [
+        "gemini-3.6-flash",
+        "gemini-3.7-flash",
+        "gemini-3.5-flash"
+    ]
+
+    selected_model = st.selectbox(
+        "AI Model",
+        model_options,
+        index=model_options.index(
+            st.session_state.selected_model
+        )
+        if st.session_state.selected_model in model_options
+        else 0
+    )
+
+    st.session_state.selected_model = selected_model
+
+    thinking_level = st.selectbox(
+        "🧠 Thinking Level",
+        [
+            "minimal",
+            "low",
+            "medium",
+            "high"
+        ],
+        index=2
+    )
+
+    st.session_state.thinking_level = thinking_level
+
+    st.divider()
+
+    st.markdown("### 🚀 Features")
+
+    st.caption("💬 Smart AI Chat")
+    st.caption("🧠 Conversation Memory")
+    st.caption("🖼️ Image Understanding")
+    st.caption("🎙️ Voice Input")
+    st.caption("🎨 Photo Studio")
+    st.caption("⚡ Gemini 3.6 Flash")
 
 # ============================================================
 # HEADER
 # ============================================================
 
-st.markdown("""
-<div class="diva-header">
-    <div class="diva-title">Diva AI Pro</div>
-    <div class="diva-subtitle">
-        Your intelligent AI assistant & creative studio
-    </div>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(
+    '<div class="diva-title">Diva AI Pro</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="diva-subtitle">'
+    'आपका स्मार्ट AI Assistant और Creative Studio'
+    '</div>',
+    unsafe_allow_html=True
+)
 
 # ============================================================
 # TABS
 # ============================================================
 
-chat_tab, studio_tab, about_tab = st.tabs(
+chat_tab, photo_tab, about_tab = st.tabs(
     [
         "💬 AI Chat",
         "🎨 Photo Studio",
@@ -278,58 +269,70 @@ chat_tab, studio_tab, about_tab = st.tabs(
 )
 
 # ============================================================
-# CHAT TAB
+# CHAT
 # ============================================================
 
 with chat_tab:
 
-    # Welcome screen
+    # Welcome
     if not st.session_state.messages:
 
         st.markdown("""
         <div class="feature-card">
-            <div class="feature-title">
-                👋 Welcome to Diva AI
-            </div>
-            <div class="feature-text">
-                Ask questions, write code, analyze images,
-                brainstorm ideas or simply chat.
-            </div>
+
+        <h3>👋 नमस्ते! मैं Diva AI हूँ</h3>
+
+        <p>
+        मुझसे coding, पढ़ाई, business,
+        ideas, images या किसी भी विषय के बारे में पूछें।
+        </p>
+
         </div>
         """, unsafe_allow_html=True)
 
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            st.info("💻 **Coding**\n\nBuild apps & debug code.")
+            st.info(
+                "💻 **Coding**\n\n"
+                "Python, websites और apps"
+            )
 
         with col2:
-            st.info("🧠 **Ideas**\n\nBrainstorm anything.")
+            st.info(
+                "🧠 **Ideas**\n\n"
+                "Business और creative ideas"
+            )
 
         with col3:
-            st.info("📸 **Vision**\n\nAnalyze images.")
+            st.info(
+                "📸 **Vision**\n\n"
+                "Images को समझें"
+            )
 
     # --------------------------------------------------------
-    # Display previous messages
+    # OLD MESSAGES
     # --------------------------------------------------------
 
     for message in st.session_state.messages:
 
-        role = message["role"]
-
-        if role == "user":
-            avatar = "👤"
-        else:
-            avatar = "✨"
+        avatar = (
+            "👤"
+            if message["role"] == "user"
+            else "✨"
+        )
 
         with st.chat_message(
-            role,
+            message["role"],
             avatar=avatar
         ):
-            st.markdown(message["content"])
+
+            st.markdown(
+                message["content"]
+            )
 
     # --------------------------------------------------------
-    # Image uploader
+    # IMAGE UPLOAD
     # --------------------------------------------------------
 
     uploaded_image = st.file_uploader(
@@ -345,25 +348,27 @@ with chat_tab:
 
     if uploaded_image:
 
-        image = Image.open(uploaded_image)
+        preview = Image.open(
+            uploaded_image
+        )
 
         st.image(
-            image,
-            caption="Attached image",
-            width=300
+            preview,
+            caption="Attached Image",
+            width=280
         )
 
     # --------------------------------------------------------
-    # Voice input
+    # VOICE
     # --------------------------------------------------------
 
-    voice = st.audio_input(
+    voice_file = st.audio_input(
         "🎙️ Voice message",
         key="voice_input"
     )
 
     # --------------------------------------------------------
-    # Chat input
+    # CHAT INPUT
     # --------------------------------------------------------
 
     prompt = st.chat_input(
@@ -371,10 +376,10 @@ with chat_tab:
     )
 
     # --------------------------------------------------------
-    # Process message
+    # SEND MESSAGE
     # --------------------------------------------------------
 
-    if prompt or voice:
+    if prompt or voice_file:
 
         if prompt:
             user_text = prompt
@@ -393,10 +398,94 @@ with chat_tab:
             "user",
             avatar="👤"
         ):
+
             st.markdown(user_text)
 
+            if uploaded_image:
+
+                st.image(
+                    Image.open(uploaded_image),
+                    width=250
+                )
+
         # ----------------------------------------------------
-        # Assistant response
+        # BUILD INPUT
+        # ----------------------------------------------------
+
+        input_data = []
+
+        # Text
+        if prompt:
+
+            input_data.append(
+                {
+                    "type": "text",
+                    "text": prompt
+                }
+            )
+
+        # Image
+        if uploaded_image:
+
+            image_bytes = uploaded_image.getvalue()
+
+            image_base64 = base64.b64encode(
+                image_bytes
+            ).decode("utf-8")
+
+            input_data.append(
+                {
+                    "type": "image",
+                    "data": image_base64,
+                    "mime_type": uploaded_image.type
+                }
+            )
+
+            if not prompt:
+
+                input_data.append(
+                    {
+                        "type": "text",
+                        "text": (
+                            "इस image को ध्यान से "
+                            "analyze करो और इसका "
+                            "विस्तार से वर्णन करो।"
+                        )
+                    }
+                )
+
+        # Voice
+        if voice_file:
+
+            audio_bytes = voice_file.getvalue()
+
+            audio_base64 = base64.b64encode(
+                audio_bytes
+            ).decode("utf-8")
+
+            input_data.append(
+                {
+                    "type": "audio",
+                    "data": audio_base64,
+                    "mime_type": (
+                        voice_file.type
+                        or "audio/wav"
+                    )
+                }
+            )
+
+            input_data.append(
+                {
+                    "type": "text",
+                    "text": (
+                        "इस voice message को समझकर "
+                        "उपयोगी उत्तर दो।"
+                    )
+                }
+            )
+
+        # ----------------------------------------------------
+        # AI RESPONSE
         # ----------------------------------------------------
 
         with st.chat_message(
@@ -404,120 +493,101 @@ with chat_tab:
             avatar="✨"
         ):
 
-            response_placeholder = st.empty()
-
             try:
 
-                model = genai.GenerativeModel(
-                    model_name=st.session_state.selected_model,
-                    system_instruction=st.session_state.system_prompt
-                )
+                request = {
+                    "model":
+                        st.session_state.selected_model,
 
-                contents = []
+                    "input":
+                        input_data,
 
-                # Conversation history
-                for msg in st.session_state.messages[:-1]:
+                    "system_instruction":
+                        SYSTEM_PROMPT,
 
-                    contents.append(
-                        {
-                            "role": (
-                                "user"
-                                if msg["role"] == "user"
-                                else "model"
-                            ),
-                            "parts": [
-                                msg["content"]
-                            ]
-                        }
-                    )
-
-                # Current user message
-                current_parts = []
-
-                if prompt:
-                    current_parts.append(prompt)
-
-                # Image
-                if uploaded_image:
-
-                    image_bytes = uploaded_image.read()
-
-                    current_parts.append(
-                        {
-                            "mime_type":
-                                uploaded_image.type,
-                            "data":
-                                image_bytes
-                        }
-                    )
-
-                # Voice
-                if voice:
-
-                    voice_bytes = voice.read()
-
-                    current_parts.append(
-                        {
-                            "mime_type":
-                                voice.type or "audio/wav",
-                            "data":
-                                voice_bytes
-                        }
-                    )
-
-                    current_parts.append(
-                        "Please understand the voice message "
-                        "and respond appropriately."
-                    )
-
-                contents.append(
-                    {
-                        "role": "user",
-                        "parts": current_parts
+                    "generation_config": {
+                        "thinking_level":
+                            st.session_state.thinking_level
                     }
-                )
-
-                # Generation config
-                generation_config = {
-                    "temperature":
-                        st.session_state.temperature
                 }
 
-                # Stream response
-                response = model.generate_content(
-                    contents,
-                    generation_config=generation_config,
-                    stream=True
+                # Continue conversation
+                if st.session_state.interaction_id:
+
+                    request[
+                        "previous_interaction_id"
+                    ] = st.session_state.interaction_id
+
+                # Gemini request
+                interaction = client.interactions.create(
+                    **request
                 )
 
-                full_response = ""
+                # Save conversation ID
+                if getattr(
+                    interaction,
+                    "id",
+                    None
+                ):
 
-                for chunk in response:
+                    st.session_state.interaction_id = (
+                        interaction.id
+                    )
 
-                    try:
-                        text = chunk.text
-                    except Exception:
-                        text = ""
-
-                    if text:
-
-                        full_response += text
-
-                        response_placeholder.markdown(
-                            full_response + "▌"
-                        )
-
-                        time.sleep(0.01)
-
-                response_placeholder.markdown(
-                    full_response
+                # Get answer
+                answer = getattr(
+                    interaction,
+                    "output_text",
+                    None
                 )
 
-                # Save response
+                # Fallback
+                if not answer:
+
+                    answer = ""
+
+                    for step in getattr(
+                        interaction,
+                        "steps",
+                        []
+                    ):
+
+                        if getattr(
+                            step,
+                            "type",
+                            ""
+                        ) == "model_output":
+
+                            for block in getattr(
+                                step,
+                                "content",
+                                []
+                            ):
+
+                                if getattr(
+                                    block,
+                                    "type",
+                                    ""
+                                ) == "text":
+
+                                    answer += (
+                                        block.text
+                                    )
+
+                if not answer:
+
+                    answer = (
+                        "मुझे इस बार कोई उत्तर नहीं मिला। "
+                        "कृपया दोबारा कोशिश करें।"
+                    )
+
+                st.markdown(answer)
+
+                # Save AI message
                 st.session_state.messages.append(
                     {
                         "role": "assistant",
-                        "content": full_response
+                        "content": answer
                     }
                 )
 
@@ -527,39 +597,48 @@ with chat_tab:
 
                 if "429" in error_text:
 
-                    friendly_error = (
-                        "⏳ **API limit reached.**\n\n"
+                    st.error(
+                        "⏳ API की limit पूरी हो गई है। "
                         "थोड़ी देर बाद फिर कोशिश करें।"
                     )
 
-                elif "API key" in error_text:
+                elif (
+                    "401" in error_text
+                    or "403" in error_text
+                    or "API key" in error_text
+                ):
 
-                    friendly_error = (
-                        "🔑 **API Key problem.**\n\n"
-                        "अपनी Gemini API key check करें।"
+                    st.error(
+                        "🔑 Gemini API key में समस्या है। "
+                        "अपनी `GEMINI_API_KEY` check करें।"
+                    )
+
+                elif "404" in error_text:
+
+                    st.error(
+                        "❌ Model उपलब्ध नहीं है। "
+                        "Sidebar से दूसरा model चुनकर देखें।"
                     )
 
                 else:
 
-                    friendly_error = (
-                        "⚠️ **Something went wrong.**\n\n"
-                        f"`{error_text}`"
+                    st.error(
+                        "⚠️ Gemini Error:\n\n"
+                        + error_text
                     )
-
-                response_placeholder.error(
-                    friendly_error
-                )
 
 # ============================================================
 # PHOTO STUDIO
 # ============================================================
 
-with studio_tab:
+with photo_tab:
 
-    st.subheader("📸 Diva Pro Photo Studio")
+    st.subheader(
+        "📸 Diva Pro Photo Studio"
+    )
 
     st.caption(
-        "Background remove करें और नया background लगाएँ।"
+        "Background हटाएँ और नया background लगाएँ।"
     )
 
     uploaded_img = st.file_uploader(
@@ -602,58 +681,38 @@ with studio_tab:
             ]
         )
 
-        # Optional resize
-        resize_enabled = st.checkbox(
-            "📐 Optimize image size",
-            value=False
-        )
-
         if st.button(
-            "✨ Remove & Change Background",
+            "✨ Background बदलें",
             use_container_width=True,
             type="primary"
         ):
 
             with st.spinner(
-                "AI background processing..."
+                "Photo process हो रही है..."
             ):
 
                 try:
 
                     from rembg import remove
 
-                    # Input bytes
-                    img_byte = io.BytesIO()
+                    # Convert image
+                    image_bytes = io.BytesIO()
 
                     input_image.save(
-                        img_byte,
+                        image_bytes,
                         format="PNG"
                     )
 
                     # Remove background
-                    no_bg_bytes = remove(
-                        img_byte.getvalue()
+                    result = remove(
+                        image_bytes.getvalue()
                     )
 
                     foreground = Image.open(
-                        io.BytesIO(no_bg_bytes)
+                        io.BytesIO(result)
                     ).convert("RGBA")
 
-                    # Optional optimization
-                    if resize_enabled:
-
-                        max_size = 1600
-
-                        foreground.thumbnail(
-                            (
-                                max_size,
-                                max_size
-                            ),
-                            Image.Resampling.LANCZOS
-                        )
-
-                    # Background
-                    color_map = {
+                    colors = {
 
                         "Studio White":
                             (255, 255, 255),
@@ -676,21 +735,17 @@ with studio_tab:
 
                     if bg_choice == "Transparent":
 
-                        final_img = foreground
+                        final_image = foreground
 
-                        final_format = "PNG"
-                        mime = "image/png"
+                        file_format = "PNG"
+                        mime_type = "image/png"
 
                     else:
-
-                        bg_color = color_map[
-                            bg_choice
-                        ]
 
                         background = Image.new(
                             "RGBA",
                             foreground.size,
-                            bg_color + (255,)
+                            colors[bg_choice] + (255,)
                         )
 
                         background.paste(
@@ -699,53 +754,59 @@ with studio_tab:
                             foreground
                         )
 
-                        final_img = background.convert(
-                            "RGB"
+                        final_image = (
+                            background.convert("RGB")
                         )
 
-                        final_format = "JPEG"
-                        mime = "image/jpeg"
+                        file_format = "JPEG"
+                        mime_type = "image/jpeg"
 
                     with col2:
 
                         st.image(
-                            final_img,
+                            final_image,
                             caption="Final Result",
                             use_container_width=True
                         )
 
-                        # Download
                         output = io.BytesIO()
 
-                        final_img.save(
-                            output,
-                            format=final_format,
-                            quality=95
-                        )
+                        if file_format == "JPEG":
+
+                            final_image.save(
+                                output,
+                                format="JPEG",
+                                quality=95
+                            )
+
+                        else:
+
+                            final_image.save(
+                                output,
+                                format="PNG"
+                            )
 
                         st.download_button(
-                            label="📥 Download Image",
+                            "📥 Download Photo",
                             data=output.getvalue(),
                             file_name=(
                                 "diva_edited."
-                                + final_format.lower()
+                                + file_format.lower()
                             ),
-                            mime=mime,
+                            mime=mime_type,
                             use_container_width=True
                         )
 
                 except ImportError:
 
                     st.error(
-                        "❌ `rembg` install नहीं है.\n\n"
-                        "Terminal में चलाएँ:\n"
-                        "`pip install rembg`"
+                        "❌ rembg installed नहीं है।"
                     )
 
-                except Exception as error:
+                except Exception as e:
 
                     st.error(
-                        f"❌ Image processing error: {error}"
+                        f"❌ Photo error: {e}"
                     )
 
 # ============================================================
@@ -754,25 +815,24 @@ with studio_tab:
 
 with about_tab:
 
-    st.subheader("✨ About Diva AI")
+    st.subheader("✨ Diva AI Pro")
 
     st.markdown("""
-    ### Diva AI Pro
+    ### Diva AI में
 
-    Diva एक multi-purpose AI assistant है जो:
+    - 💬 AI Chat
+    - 🧠 Conversation Memory
+    - 🖼️ Image Understanding
+    - 🎙️ Voice Input
+    - 🎨 Photo Studio
+    - ⚡ Gemini 3.6 Flash
+    - 🧠 Adjustable Thinking
+    - 🌙 Modern Dark UI
 
-    - 💬 Intelligent conversations
-    - 🧠 Multi-turn context
-    - 📸 Image understanding
-    - 🎙️ Voice messages
-    - 💻 Coding assistance
-    - 🎨 Photo background editing
-    - ⚙️ Custom AI personality
-    - 🤖 Multiple Gemini models
-
-    को एक ही application में combine करता है।
+    Diva AI का उद्देश्य एक ही जगह पर
+    AI assistant और creative tools देना है।
     """)
 
     st.success(
-        "🚀 Diva AI Pro — Built for a better AI experience."
+        "🚀 Diva AI Pro तैयार है!"
     )
