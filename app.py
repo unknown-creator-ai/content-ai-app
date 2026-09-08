@@ -7,47 +7,41 @@ import io
 st.set_page_config(
     page_title="Diva AI",
     page_icon="✨",
-    layout="wide",
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
-# 2. कस्टम CSS (Gemini स्टाइल बॉटम बार और डार्क थीम)
+# 2. अल्ट्रा-मोबाइल फ्रेंडली Gemini स्टाइल CSS
 st.markdown("""
 <style>
     .stApp { background-color: #131314; color: #e3e3e3; }
     header { visibility: hidden; }
     
-    /* टैब बार स्टाइल */
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; border-bottom: 1px solid #282a2c; }
+    /* टैब बार को स्लीक बनाना */
+    .stTabs [data-baseweb="tab-list"] { gap: 12px; border-bottom: 1px solid #282a2c; }
     .stTabs [data-baseweb="tab"] {
         background-color: transparent;
-        color: #c4c7c5;
+        color: #9ca3af;
         border-radius: 20px;
-        padding: 6px 16px;
+        padding: 6px 14px;
+        font-size: 14px;
     }
     .stTabs [aria-selected="true"] {
         background-color: #282a2c !important;
         color: #a8c7fa !important;
     }
-    
-    /* बॉटम डॉक कंटेनर */
-    .bottom-bar {
-        position: fixed;
-        bottom: 15px;
-        left: 5%;
-        width: 90%;
-        background-color: #1e1f20;
-        border-radius: 28px;
-        padding: 6px 14px;
-        display: flex;
-        align-items: center;
-        border: 1px solid #3c4043;
-        z-index: 9999;
+
+    /* चैट एरिया में पैडिंग ताकि इनपुट बार टेक्स्ट को न दबाए */
+    .chat-scroll {
+        padding-bottom: 20px;
     }
-    
-    /* मुख्य चैट एरिया के नीचे स्पेस ताकि टेक्स्ट न छिपे */
-    .chat-container {
-        padding-bottom: 120px;
+
+    /* इनपुट सेक्शन को एक ही कार्ड में पैक करना */
+    div[data-testid="stExpander"] {
+        background-color: #1e1f20;
+        border: 1px solid #3c4043;
+        border-radius: 16px;
+        margin-bottom: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -63,18 +57,17 @@ genai.configure(api_key=api_key)
 # 4. स्टेट इनिशियलाइज़ेशन
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
-if "attached_image" not in st.session_state:
-    st.session_state.attached_image = None
+if "attached_img" not in st.session_state:
+    st.session_state.attached_img = None
 
 tab_chat, tab_studio = st.tabs(["💬 Diva AI", "🎨 स्टूडियो"])
 
-# ==================== टैब 1: Diva AI (Gemini Bar) ====================
+# ==================== टैब 1: Diva AI ====================
 with tab_chat:
-    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-    
+    st.markdown('<div class="chat-scroll">', unsafe_allow_html=True)
     if not st.session_state.chat_history:
-        st.markdown("<h2 style='text-align: center; color: #a8c7fa; margin-top: 40px;'>Hello, I'm Diva AI</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #8e918f;'>Ask anything, attach photos, or record voice.</p>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #a8c7fa; margin-top: 25px;'>Hello, I'm Diva AI</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #8e918f; font-size: 14px;'>Ask anything, attach photos, or record voice notes.</p>", unsafe_allow_html=True)
 
     for msg in st.session_state.chat_history:
         avatar = "👤" if msg["role"] == "user" else "✨"
@@ -82,138 +75,118 @@ with tab_chat:
             if msg.get("image"):
                 st.image(msg["image"], width=240)
             st.markdown(msg["content"])
-            
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # सिंगल इनपुट रो (Gemini जैसा)
-    col_plus, col_txt, col_send = st.columns([1, 6, 1])
+    # मीडिया अटैचमेंट और वॉइस के लिए कॉम्पैक्ट टॉगल (स्क्रीन पर बड़ा बॉक्स नहीं बनेगा)
+    with st.expander("📎 फ़ोटो / वॉइस अटैच करें (Tap to expand)"):
+        f_up = st.file_uploader("📷 कैमरा या गैलरी से फ़ोटो लें", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+        if f_up:
+            st.session_state.attached_img = Image.open(f_up)
+            st.success("✅ फ़ोटो अटैच हो गई")
+        v_rec = st.audio_input("🎙️ वॉइस मैसेज रिकॉर्ड करें", label_visibility="collapsed")
 
-    with col_plus:
-        with st.popover("➕", use_container_width=True):
-            st.markdown("**मीडिया व टूल्स**")
-            file_up = st.file_uploader("📷 फ़ोटो चुनें", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-            if file_up:
-                st.session_state.attached_image = Image.open(file_up)
-                st.success("फ़ोटो जोड़ी गई!")
-            
-            st.markdown("**वॉइस रिकॉर्डर**")
-            v_msg = st.audio_input("वॉइस रिकॉर्ड करें", label_visibility="collapsed")
+    # सिंगल नेटिव चैट इनपुट बार (यह अपने आप स्क्रीन के बॉटम पर चिपकता है)
+    prompt_placeholder = "Ask Diva..." if not st.session_state.attached_img else "Ask Diva... [फ़ोटो अटैच है]"
+    prompt = st.chat_input(prompt_placeholder)
 
-    with col_txt:
-        user_input = st.text_input(
-            "मैसेज", 
-            placeholder="Ask Diva... " + ("(फ़ोटो अटैच है)" if st.session_state.attached_image else ""), 
-            label_visibility="collapsed",
-            key="user_text_query"
-        )
+    if prompt or (v_rec and not prompt) or (st.session_state.attached_img and prompt):
+        user_query = prompt if prompt else "🎙️ [वॉइस मैसेज]"
+        cur_image = st.session_state.attached_img
 
-    with col_send:
-        send_btn = st.button("➔", use_container_width=True)
-
-    # मैसेज प्रोसेस करना
-    if send_btn and (user_input or v_msg or st.session_state.attached_image):
-        final_text = user_input if user_input else ("🎙️ [वॉइस संदेश]" if v_msg else "📎 [फ़ोटो अपलोड]")
-        cur_img = st.session_state.attached_image
-
-        st.session_state.chat_history.append({"role": "user", "content": final_text, "image": cur_img})
+        st.session_state.chat_history.append({"role": "user", "content": user_query, "image": cur_image})
 
         with st.chat_message("user", avatar="👤"):
-            if cur_img:
-                st.image(cur_img, width=240)
-            st.write(final_text)
+            if cur_image:
+                st.image(cur_image, width=240)
+            st.write(user_query)
 
         with st.chat_message("assistant", avatar="✨"):
-            def execute_reply():
+            def run_gemini():
                 payload = []
-                if cur_img:
-                    payload.append(cur_img)
-                if v_msg and not user_input:
-                    payload.append({"mime_type": "audio/wav", "data": v_msg.read()})
+                if cur_image:
+                    payload.append(cur_image)
+                if v_rec and not prompt:
+                    payload.append({"mime_type": "audio/wav", "data": v_rec.read()})
                     payload.append("कृपया इस वॉइस मैसेज का हिंदी में विस्तार से उत्तर दें।")
                 else:
-                    payload.append(final_text)
+                    payload.append(user_query)
 
                 models = ["gemini-3.6-flash", "gemini-3.8-flash"]
-                success = False
-                for m_name in models:
+                worked = False
+                for m in models:
                     try:
-                        m = genai.GenerativeModel(m_name)
-                        res = m.generate_content(payload, stream=True)
+                        ai_mod = genai.GenerativeModel(m)
+                        res = ai_mod.generate_content(payload, stream=True)
                         for chunk in res:
                             if chunk.text:
                                 yield chunk.text
-                        success = True
+                        worked = True
                         break
                     except Exception:
                         continue
 
-                if not success:
-                    yield "⏳ Google कोटा सीमा पर है। कृपया 10-15 सेकंड रुककर दोबारा पूछें।"
+                if not worked:
+                    yield "⏳ कोटा सीमा पर है, कृपया 10-15 सेकंड बाद पूछें।"
 
-            out_text = st.write_stream(execute_reply)
-            st.session_state.chat_history.append({"role": "assistant", "content": out_text, "image": None})
-            
-            # अटैचमेंट साफ़ करना
-            st.session_state.attached_image = None
+            out = st.write_stream(run_gemini)
+            st.session_state.chat_history.append({"role": "assistant", "content": out, "image": None})
+            st.session_state.attached_img = None
             st.rerun()
 
-# ==================== टैब 2: प्रो स्टूडियो (फ़ेस-सेफ़) ====================
+# ==================== टैब 2: फ़ेस-सेफ़ स्टूडियो ====================
 with tab_studio:
-    st.markdown("### 📸 फेस-सेफ़ बैकग्राउंड स्टूडियो")
-    st.caption("चेहरा 100% ओरिजिनल रहेगा — केवल बैकग्राउंड बदलेगा।")
+    st.markdown("### 📸 फ़ेस-सेफ़ स्टूडियो")
+    st.caption("चेहरे में 0% बदलाव — सिर्फ बैकग्राउंड बदलेगा।")
 
-    studio_pic = st.file_uploader("फ़ोटो अपलोड करें", type=["jpg", "jpeg", "png"], key="st_pic_box")
-    if studio_pic:
-        img_src = Image.open(studio_pic)
-        c1, c2 = st.columns(2)
-        with c1:
-            st.image(img_src, caption="मूल फ़ोटो", use_container_width=True)
+    file_item = st.file_uploader("फ़ोटो अपलोड करें", type=["jpg", "jpeg", "png"], key="studio_file_box")
+    if file_item:
+        in_img = Image.open(file_item)
+        st.image(in_img, caption="मूल फ़ोटो", use_container_width=True)
 
-        mode_bg = st.selectbox(
+        choice = st.selectbox(
             "बैकग्राउंड रंग चुनें:",
             ["ट्रांसपेरेंट (PNG)", "सफ़ेद (Passport White)", "नेवी ब्लू (Studio Blue)", "सॉफ़्ट ग्रे (Modern Gray)", "कस्टम रंग"]
         )
 
-        hex_val = "#ffffff"
-        if mode_bg == "कस्टम रंग":
-            hex_val = st.color_picker("रंग पिक करें", "#ffffff")
+        hex_code = "#ffffff"
+        if choice == "कस्टम रंग":
+            hex_code = st.color_picker("रंग पिक करें", "#ffffff")
 
         if st.button("✨ बैकग्राउंड बदलें (1-Click)", use_container_width=True):
-            with st.spinner("AI प्रोसेसिंग जारी है..."):
+            with st.spinner("AI बैकग्राउंड बदल रहा है..."):
                 try:
                     from rembg import remove
                     b_in = io.BytesIO()
-                    img_src.save(b_in, format="PNG")
-                    cutout = Image.open(io.BytesIO(remove(b_in.getvalue()))).convert("RGBA")
+                    in_img.save(b_in, format="PNG")
+                    cut = Image.open(io.BytesIO(remove(b_in.getvalue()))).convert("RGBA")
 
-                    if mode_bg == "ट्रांसपेरेंट (PNG)":
-                        final_out = cutout
+                    if choice == "ट्रांसपेरेंट (PNG)":
+                        res_img = cut
                     else:
                         palette = {
                             "सफ़ेद (Passport White)": (255, 255, 255),
                             "नेवी ब्लू (Studio Blue)": (24, 52, 115),
                             "सॉफ़्ट ग्रे (Modern Gray)": (224, 226, 230),
                         }
-                        rgb = palette.get(mode_bg)
+                        rgb = palette.get(choice)
                         if not rgb:
-                            rgb = tuple(int(hex_val.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                            rgb = tuple(int(hex_code.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
 
-                        bg_layer = Image.new("RGBA", cutout.size, rgb + (255,))
-                        bg_layer.paste(cutout, (0, 0), mask=cutout)
-                        final_out = bg_layer.convert("RGB")
+                        bg_layer = Image.new("RGBA", cut.size, rgb + (255,))
+                        bg_layer.paste(cut, (0, 0), mask=cut)
+                        res_img = bg_layer.convert("RGB")
 
-                    with c2:
-                        st.image(final_out, caption="एडिटेड फ़ोटो", use_container_width=True)
-                        b_out = io.BytesIO()
-                        fmt = "PNG" if mode_bg == "ट्रांसपेरेंट (PNG)" else "JPEG"
-                        final_out.save(b_out, format=fmt)
-                        st.download_button(
-                            label="📥 डाउनलोड करें",
-                            data=b_out.getvalue(),
-                            file_name=f"diva_edit.{fmt.lower()}",
-                            mime=f"image/{fmt.lower()}",
-                            use_container_width=True
-                        )
-                except Exception as err:
-                    st.error(f"एरर आया: {err}")
+                    st.image(res_img, caption="फाइनल रिजल्ट", use_container_width=True)
+                    b_out = io.BytesIO()
+                    fmt = "PNG" if choice == "ट्रांसपेरेंट (PNG)" else "JPEG"
+                    res_img.save(b_out, format=fmt)
+                    st.download_button(
+                        "📥 डाउनलोड करें",
+                        data=b_out.getvalue(),
+                        file_name=f"diva_photo.{fmt.lower()}",
+                        mime=f"image/{fmt.lower()}",
+                        use_container_width=True
+                    )
+                except Exception as e:
+                    st.error(f"त्रुटि: {e}")
 
